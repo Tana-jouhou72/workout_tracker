@@ -297,11 +297,8 @@ function showExercise(day) {
                 <button id="prev-exercise" class="btn secondary-btn ${currentExerciseIndex === 0 ? 'hidden' : ''}">
                     <i class="fas fa-arrow-left"></i> Previous
                 </button>
-                <button id="save-set" class="btn primary-btn">
-                    <i class="fas fa-save"></i> Save Set
-                </button>
                 <button id="next-exercise" class="btn primary-btn">
-                    ${currentExerciseIndex < totalExercises - 1 ? '<i class="fas fa-arrow-right"></i> Next' : '<i class="fas fa-check"></i> Finish'}
+                    ${currentExerciseIndex < totalExercises - 1 ? '<i class="fas fa-arrow-right"></i> Next' : '<i class="fas fa-check"></i> Finish Workout'}
                 </button>
             </div>
         </div>
@@ -315,37 +312,47 @@ function showExercise(day) {
     
     // Add event listeners
     document.getElementById("next-exercise").addEventListener("click", function() {
+        // Always save the current exercise data
         saveRepsData(day, currentExerciseIndex);
         
         if (currentExerciseIndex < totalExercises - 1) {
             currentExerciseIndex++;
             showExercise(day);
         } else {
+            // This is the "Finish Workout" button
+            // Save all data for all exercises first
+            saveAllSetsData(day);
+            
+            // Then save the workout to the database
             saveWorkoutToDatabase(day);
-            alert("Workout complete! Great job!");
+            
+            // Show completion message
+            alert("Workout complete! All your sets have been saved!");
+            
+            // Reset to first exercise
             currentExerciseIndex = 0;
             showExercise(day);
         }
     });
     
-    document.getElementById("save-set").addEventListener("click", function() {
-        saveRepsData(day, currentExerciseIndex);
-        playSound("set-complete");
-        
-        // Provide visual feedback
-        this.innerHTML = '<i class="fas fa-check"></i> Saved!';
-        setTimeout(() => {
-            this.innerHTML = '<i class="fas fa-save"></i> Save Set';
-        }, 1500);
-    });
-    
     if (currentExerciseIndex > 0) {
         document.getElementById("prev-exercise").addEventListener("click", function() {
+            // Save current exercise data before going back
             saveRepsData(day, currentExerciseIndex);
+            
             currentExerciseIndex--;
             showExercise(day);
         });
     }
+}
+
+// Add this function to save all sets data for the current day
+function saveAllSetsData(day) {
+    // Loop through all exercises
+    for (let exerciseIndex = 0; exerciseIndex < workoutPlan[day].exercises.length; exerciseIndex++) {
+        saveRepsData(day, exerciseIndex);
+    }
+    console.log("All sets data saved successfully!");
 }
 
 // Database operations

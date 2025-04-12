@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weekly Workout Plan</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <h1><i class="fas fa-dumbbell"></i> Weekly Workout Plan</h1>
+        </header>
+        
+        <main>
+            <section id="day-selector">
+                <label for="day">Select Workout Day:</label>
+                <select id="day">
+                    <option value="1">Monday - Push Day</option>
+                    <option value="2">Tuesday - Pull Day</option>
+                    <option value="3">Wednesday - Legs & Core</option>
+                    <option value="4">Thursday - Recovery</option>
+                    <option value="5">Friday - Full Body</option>
+                    <option value="6">Saturday - Cardio & Core</option>
+                    <option value="7">Sunday - Rest Day</option>
+                </select>
+            </section>
+            
+            <div class="dashboard">
+                <section id="workout-display">
+                    <div id="workout-details"></div>
+                    
+                    <div id="rest-timer-container">
+                        <!-- Rest timer dynamically initialized here -->
+                    </div>
+                </section>
+                
+                <div class="workout-summary">
+                    <div class="summary-card">
+                        <h3><i class="fas fa-stopwatch"></i> Workout Duration</h3>
+                        <p id="workout-timer-display">0m 0s</p>
+                    </div>
+                    
+                    <div class="summary-card">
+                        <h3><i class="fas fa-fire"></i> Progress</h3>
+                        <div class="progress-container">
+                            <div id="exercise-progress-bar" class="progress-bar"></div>
+                        </div>
+                        <p id="progress-text">Exercise 0 of 0</p>
+                    </div>
+                </div>
+            </div>
+            
+            <section id="history-section">
+                <div class="history-header">
+                    <h2><i class="fas fa-history"></i> Workout History</h2>
+                    <button id="view-history" class="btn primary-btn">
+                        <i class="fas fa-chart-line"></i> View History
+                    </button>
+                </div>
+                <div id="history-container" class="hidden"></div>
+            </section>
+        </main>
+        
+        <footer>
+            <p>&copy; 2025 Weekly Workout Tracker</p>
+        </footer>
+    </div>
+    
+    <!-- Sound effects -->
+    <audio id="timer-complete" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg"></audio>
+    <audio id="set-complete" src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg"></audio>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

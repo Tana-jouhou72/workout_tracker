@@ -86,8 +86,14 @@ let restTimer = null;
 let isRestTimerRunning = false;
 let restTimeLeft = 0;
 let exerciseRepsData = {};
+let exerciseWeightData = {};
+let personalRecords = {};
+let workoutNotes = {};
+let setsCompleted = 0;
+let totalVolume = 0;
 let currentDay = null;
 let totalExercises = 0;
+let notificationsEnabled = false;
 
 // Initialize database
 async function initDatabase() {
@@ -101,12 +107,115 @@ async function initDatabase() {
             date TEXT,
             day INTEGER,
             workoutName TEXT,
-            exercises TEXT
+            exercises TEXT,
+            notes TEXT
         );`);
         
+        // Create a table for personal records
+        db.run(`CREATE TABLE IF NOT EXISTS personal_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            exercise TEXT,
+            weight REAL,
+            reps INTEGER,
+            date TEXT
+        );`);
+        
+        loadPersonalRecords();
         console.log("Database initialized successfully");
     } catch (error) {
         console.error("Error initializing database:", error);
+    }
+}
+
+// Load personal records from database
+function loadPersonalRecords() {
+    try {
+        if (!db) return;
+        
+        const result = db.exec("SELECT exercise, weight, reps FROM personal_records");
+        
+        if (result.length && result[0].values.length) {
+            result[0].values.forEach(row => {
+                const [exercise, weight, reps] = row;
+                
+                if (!personalRecords[exercise]) {
+                    personalRecords[exercise] = {};
+                }
+                
+                personalRecords[exercise][`${weight}kg`] = reps;
+            });
+        }
+    } catch (error) {
+        console.error("Error loading personal records:", error);
+    }
+}
+
+// Theme Toggle
+function initThemeToggle() {
+    const themeSwitch = document.getElementById("theme-switch");
+    const htmlElement = document.documentElement;
+    
+    // Check for saved theme preference
+    const savedTheme = localStorage.getItem("theme");
+    if (savedTheme === "dark") {
+        htmlElement.setAttribute("data-theme", "dark");
+        themeSwitch.checked = true;
+    }
+    
+    // Add theme toggle event listener
+    themeSwitch.addEventListener("change", function() {
+        if (this.checked) {
+            htmlElement.setAttribute("data-theme", "dark");
+            localStorage.setItem("theme", "dark");
+        } else {
+            htmlElement.setAttribute("data-theme", "light");
+            localStorage.setItem("theme", "light");
+        }
+    });
+}
+
+// Notification system
+function initNotifications() {
+    // Check if browser supports notifications
+    if (!("Notification" in window)) {
+        console.log("This browser does not support notifications");
+        return;
+    }
+    
+    // Check if user has already made a choice
+    if (Notification.permission === "granted") {
+        notificationsEnabled = true;
+    } else if (Notification.permission !== "denied") {
+        // Show our custom prompt
+        const notificationDialog = document.getElementById("notification-permission");
+        notificationDialog.classList.remove("hidden");
+        
+        document.getElementById("enable-notifications").addEventListener("click", function() {
+            Notification.requestPermission().then(permission => {
+                if (permission === "granted") {
+                    notificationsEnabled = true;
+                }
+                notificationDialog.classList.add("hidden");
+            });
+        });
+        
+        document.getElementById("disable-notifications").addEventListener("click", function() {
+            notificationDialog.classList.add("hidden");
+        });
+    }
+}
+
+function sendNotification(title, message) {
+    if (notificationsEnabled && document.visibilityState !== "visible") {
+        const notification = new Notification(title, {
+            body: message,
+            icon: "https://cdn-icons-png.flaticon.com/512/2936/2936886.png"
+        });
+        
+        notification.onclick = function() {
+            window.focus();
+            this.close();
+        };
     }
 }
 
@@ -114,8 +223,15 @@ async function initDatabase() {
 function playSound(id) {
     const sound = document.getElementById(id);
     if (sound) {
-        sound.currentTime = 0;
-        sound.play().catch(e => console.log("Sound play error:", e));
+        // Check if the browser supports the play method
+        if (typeof sound.play === 'function') {
+            // Try to play the sound, but catch any errors to prevent app from getting stuck
+            sound.currentTime = 0;
+            sound.play().catch(e => {
+                console.log("Sound play error or notification not allowed:", e);
+                // Continue with app functionality even if sound fails
+            });
+        }
     }
 }
 
@@ -150,12 +266,26 @@ function initializeRestTimer() {
         <div class="timer-input">
             <input type="number" id="rest-time" placeholder="Seconds" min="1" max="300">
         </div>
+        <div class="timer-presets">
+            <button class="preset-btn" data-time="30">30s</button>
+            <button class="preset-btn" data-time="60">60s</button>
+            <button class="preset-btn" data-time="90">90s</button>
+            <button class="preset-btn" data-time="120">2m</button>
+        </div>
         <div class="timer-controls">
             <button id="toggle-rest-timer" class="btn primary-btn">
                 <i class="fas fa-play"></i> Start
             </button>
         </div>
     `;
+    
+    // Add event listeners for preset buttons
+    document.querySelectorAll('.preset-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            const time = this.getAttribute('data-time');
+            document.getElementById('rest-time').value = time;
+        });
+    });
     
     document.getElementById("toggle-rest-timer").addEventListener("click", function() {
         const restTimeInput = parseInt(document.getElementById("rest-time").value, 10);
@@ -195,7 +325,10 @@ function toggleRestTimer(restTime) {
                 toggleButton.innerHTML = '<i class="fas fa-play"></i> Start';
                 timerDisplay.textContent = "Done!";
                 timerCircle.style.setProperty("--progress", "100%");
+                
+                // Try to play sound but don't block if it fails
                 playSound("timer-complete");
+                sendNotification("Rest Timer Complete", "Time to start your next set!");
             } else {
                 restTimeLeft--;
                 const progress = ((restTime - restTimeLeft) / restTime) * 100;
@@ -217,26 +350,78 @@ function saveRepsData(day, exerciseIndex) {
     }
     
     const sets = [];
+    let setsCompleted = 0;
+    let totalVolume = 0;
+    
     for (let setIndex = 0; setIndex < 4; setIndex++) {
         const repsInput = document.getElementById(`reps-${exerciseIndex}-set-${setIndex}`);
+        const weightInput = document.getElementById(`weight-${exerciseIndex}-set-${setIndex}`);
+        
         if (repsInput) {
-            sets.push(repsInput.value || "");
+            const reps = repsInput.value || "";
+            const weight = weightInput ? parseFloat(weightInput.value) || 0 : 0;
+            
+            sets.push({ reps, weight });
+            
+            if (reps && weight) {
+                setsCompleted++;
+                totalVolume += parseInt(reps) * weight;
+                
+                // Check for personal record
+                checkForPersonalRecord(workoutPlan[day].exercises[exerciseIndex], weight, parseInt(reps));
+            }
         }
     }
     
     exerciseRepsData[day][exerciseIndex] = sets;
+    
+    // Update workout stats
+    updateWorkoutStats(setsCompleted, totalVolume);
+}
+
+function saveAllSetsData(day) {
+    // Reset stats
+    setsCompleted = 0;
+    totalVolume = 0;
+    
+    // Loop through all exercises
+    for (let exerciseIndex = 0; exerciseIndex < workoutPlan[day].exercises.length; exerciseIndex++) {
+        saveRepsData(day, exerciseIndex);
+    }
+    
+    // Save workout notes
+    const notes = document.getElementById("session-notes").value;
+    workoutNotes[day] = notes;
+    
+    console.log("All sets data saved successfully!");
 }
 
 function restoreRepsData(day, exerciseIndex) {
     if (exerciseRepsData[day] && exerciseRepsData[day][exerciseIndex]) {
         const sets = exerciseRepsData[day][exerciseIndex];
-        sets.forEach((reps, setIndex) => {
+        sets.forEach((set, setIndex) => {
             const repsInput = document.getElementById(`reps-${exerciseIndex}-set-${setIndex}`);
+            const weightInput = document.getElementById(`weight-${exerciseIndex}-set-${setIndex}`);
+            
             if (repsInput) {
-                repsInput.value = reps;
+                repsInput.value = set.reps || "";
+            }
+            
+            if (weightInput) {
+                weightInput.value = set.weight || "";
             }
         });
     }
+}
+
+function updateWorkoutStats(setsDone, volume) {
+    // Add to existing stats
+    setsCompleted += setsDone;
+    totalVolume += volume;
+    
+    // Update display
+    document.getElementById("sets-completed").textContent = setsCompleted;
+    document.getElementById("total-volume").textContent = `${totalVolume}kg`;
 }
 
 function updateProgressBar() {
@@ -247,6 +432,58 @@ function updateProgressBar() {
         const progress = ((currentExerciseIndex + 1) / totalExercises) * 100;
         progressBar.style.width = `${progress}%`;
         progressText.textContent = `Exercise ${currentExerciseIndex + 1} of ${totalExercises}`;
+    }
+}
+
+function checkForPersonalRecord(exercise, weight, reps) {
+    if (!personalRecords[exercise] || 
+        !personalRecords[exercise][`${weight}kg`] || 
+        personalRecords[exercise][`${weight}kg`] < reps) {
+        
+        // New personal record!
+        if (!personalRecords[exercise]) {
+            personalRecords[exercise] = {};
+        }
+        
+        personalRecords[exercise][`${weight}kg`] = reps;
+        
+        // Save to database
+        try {
+            if (db) {
+                // Check if record already exists
+                const result = db.exec(`SELECT id FROM personal_records WHERE exercise='${exercise}' AND weight=${weight}`);
+                
+                if (result.length && result[0].values.length) {
+                    // Update existing record
+                    const id = result[0].values[0][0];
+                    db.run(`UPDATE personal_records SET reps=${reps}, date=date('now') WHERE id=${id}`);
+                } else {
+                    // Insert new record
+                    db.run(`INSERT INTO personal_records (exercise, weight, reps, date) VALUES (?, ?, ?, date('now'))`, 
+                        [exercise, weight, reps]);
+                }
+            }
+        } catch (error) {
+            console.error("Error saving personal record:", error);
+        }
+        
+        // Show PR notification
+        const prBadge = document.createElement("div");
+        prBadge.className = "pr-badge";
+        prBadge.innerHTML = '<i class="fas fa-trophy"></i> New PR!';
+        
+        const exerciseCard = document.querySelector(".exercise-card");
+        if (exerciseCard) {
+            exerciseCard.appendChild(prBadge);
+            
+            // Play sound
+            playSound("pr-sound");
+            
+            // Remove after 3 seconds
+            setTimeout(() => {
+                prBadge.remove();
+            }, 3000);
+        }
     }
 }
 
@@ -287,9 +524,12 @@ function showExercise(day) {
             </div>
             <div class="sets-container">
                 ${[...Array(4)].map((_, setIndex) => `
-                    <div class="set-input">
-                        <button>Set ${setIndex + 1}</button>
-                        <input type="number" id="reps-${currentExerciseIndex}-set-${setIndex}" placeholder="Reps" min="0">
+                    <div class="set-group">
+                        <div class="set-input">
+                            <button>Set ${setIndex + 1}</button>
+                            <input type="number" id="reps-${currentExerciseIndex}-set-${setIndex}" placeholder="Reps" min="0">
+                        </div>
+                        <input type="number" id="weight-${currentExerciseIndex}-set-${setIndex}" class="weight-input" placeholder="kg" min="0" step="0.5">
                     </div>
                 `).join('')}
             </div>
@@ -346,13 +586,30 @@ function showExercise(day) {
     }
 }
 
-// Add this function to save all sets data for the current day
-function saveAllSetsData(day) {
-    // Loop through all exercises
-    for (let exerciseIndex = 0; exerciseIndex < workoutPlan[day].exercises.length; exerciseIndex++) {
-        saveRepsData(day, exerciseIndex);
+// Notes functionality
+function initializeWorkoutNotes() {
+    const saveNotesButton = document.getElementById("save-notes");
+    saveNotesButton.addEventListener("click", function() {
+        const notes = document.getElementById("session-notes").value;
+        if (currentDay) {
+            workoutNotes[currentDay] = notes;
+            
+            // Show success message
+            saveNotesButton.innerHTML = '<i class="fas fa-check"></i> Saved!';
+            setTimeout(() => {
+                saveNotesButton.innerHTML = 'Save Notes';
+            }, 2000);
+        }
+    });
+}
+
+function restoreWorkoutNotes(day) {
+    const notesTextarea = document.getElementById("session-notes");
+    if (workoutNotes[day]) {
+        notesTextarea.value = workoutNotes[day];
+    } else {
+        notesTextarea.value = '';
     }
-    console.log("All sets data saved successfully!");
 }
 
 // Database operations
@@ -365,6 +622,7 @@ function saveWorkoutToDatabase(day) {
         
         const workout = workoutPlan[day];
         const workoutName = workout.name;
+        const notes = workoutNotes[day] || '';
         
         // Collect all exercise data
         const exercisesData = [];
@@ -373,9 +631,13 @@ function saveWorkoutToDatabase(day) {
             const sets = [];
             
             if (exerciseRepsData[day] && exerciseRepsData[day][i]) {
-                exerciseRepsData[day][i].forEach((reps, setIndex) => {
-                    if (reps) {
-                        sets.push({ set: setIndex + 1, reps: parseInt(reps, 10) });
+                exerciseRepsData[day][i].forEach((set, setIndex) => {
+                    if (set.reps) {
+                        sets.push({ 
+                            set: setIndex + 1, 
+                            reps: parseInt(set.reps, 10) || 0,
+                            weight: parseFloat(set.weight) || 0
+                        });
                     }
                 });
             }
@@ -386,12 +648,55 @@ function saveWorkoutToDatabase(day) {
         const today = new Date().toISOString().split("T")[0];
         const exercisesJSON = JSON.stringify(exercisesData);
         
-        db.run(`INSERT INTO workouts (date, day, workoutName, exercises) VALUES (?, ?, ?, ?);`, 
-            [today, day, workoutName, exercisesJSON]);
+        db.run(`INSERT INTO workouts (date, day, workoutName, exercises, notes) VALUES (?, ?, ?, ?, ?);`, 
+            [today, day, workoutName, exercisesJSON, notes]);
         
         console.log("Workout data saved to database");
     } catch (error) {
         console.error("Error saving to database:", error);
+    }
+}
+
+function exportToCSV() {
+    try {
+        if (!db) {
+            alert("No workout data to export.");
+            return;
+        }
+        
+        // Get workout history
+        const result = db.exec("SELECT date, workoutName, exercises FROM workouts ORDER BY date DESC");
+        
+        if (!result.length || !result[0].values.length) {
+            alert("No workout history found to export.");
+            return;
+        }
+        
+        let csvContent = "data:text/csv;charset=utf-8,";
+        csvContent += "Date,Workout,Exercise,Set,Reps,Weight\n";
+        
+        result[0].values.forEach(row => {
+            const [date, workoutName, exercisesJSON] = row;
+            const exercises = JSON.parse(exercisesJSON);
+            
+            exercises.forEach(e => {
+                if (e.sets && e.sets.length > 0) {
+                    e.sets.forEach(set => {
+                        csvContent += `${date},${workoutName},"${e.exercise}",${set.set},${set.reps},${set.weight || 0}\n`;
+                    });
+                }
+            });
+        });
+        
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `workout_history_${new Date().toISOString().slice(0, 10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    } catch (error) {
+        console.error("Error exporting CSV:", error);
     }
 }
 
@@ -421,8 +726,12 @@ function viewWorkoutHistory() {
         }
         
         const historyContainer = document.getElementById("history-container");
+        const calendarContainer = document.getElementById("calendar-container");
         
-        // Toggle visibility
+        // Hide calendar if visible
+        calendarContainer.classList.add("hidden");
+        
+        // Toggle history visibility
         if (historyContainer.classList.contains("hidden")) {
             historyContainer.classList.remove("hidden");
             document.getElementById("view-history").innerHTML = '<i class="fas fa-eye-slash"></i> Hide History';
@@ -442,15 +751,24 @@ function viewWorkoutHistory() {
             let historyHTML = '';
             
             result[0].values.forEach(row => {
-                const [id, date, day, name, exercisesJSON] = row;
+                const [id, date, day, name, exercisesJSON, notes] = row;
                 const exercises = JSON.parse(exercisesJSON);
                 
                 historyHTML += `
                     <div class="workout-history-entry">
                         <div class="workout-history-date">${formatDate(date)}</div>
                         <div class="workout-history-name">${name}</div>
-                        <ul class="exercise-history-list">
                 `;
+                
+                if (notes) {
+                    historyHTML += `
+                        <div class="workout-history-notes">
+                            <em>${notes}</em>
+                        </div>
+                    `;
+                }
+                
+                historyHTML += `<ul class="exercise-history-list">`;
                 
                 exercises.forEach(e => {
                     if (e.sets && e.sets.length > 0) {
@@ -459,7 +777,7 @@ function viewWorkoutHistory() {
                                 ${e.exercise}
                                 <div class="sets-history">
                                     ${e.sets.map(set => `
-                                        <span class="set-history-pill">Set ${set.set}: ${set.reps} reps</span>
+                                        <span class="set-history-pill">Set ${set.set}: ${set.reps} reps @ ${set.weight || 0}kg</span>
                                     `).join('')}
                                 </div>
                             </li>
@@ -483,6 +801,130 @@ function viewWorkoutHistory() {
     }
 }
 
+function viewCalendar() {
+    try {
+        if (!db) {
+            alert("No workout data available for calendar view.");
+            return;
+        }
+        
+        const historyContainer = document.getElementById("history-container");
+        const calendarContainer = document.getElementById("calendar-container");
+        
+        // Hide history if visible
+        historyContainer.classList.add("hidden");
+        
+        // Toggle calendar visibility
+        if (calendarContainer.classList.contains("hidden")) {
+            calendarContainer.classList.remove("hidden");
+            document.getElementById("view-calendar").innerHTML = '<i class="fas fa-eye-slash"></i> Hide Calendar';
+            
+            // Get current month and year
+            const now = new Date();
+            const currentMonth = now.getMonth();
+            const currentYear = now.getFullYear();
+            
+            renderCalendar(currentMonth, currentYear);
+        } else {
+            calendarContainer.classList.add("hidden");
+            document.getElementById("view-calendar").innerHTML = '<i class="fas fa-calendar"></i> Calendar View';
+        }
+    } catch (error) {
+        console.error("Error viewing calendar:", error);
+    }
+}
+
+function renderCalendar(month, year) {
+    const calendarContainer = document.getElementById("calendar-container");
+    
+    // Get first day of month and total days
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    
+    // Get workout dates for current month
+    const workoutDates = getWorkoutDatesForMonth(month, year);
+    
+    // Month names
+    const monthNames = ["January", "February", "March", "April", "May", "June",
+                        "July", "August", "September", "October", "November", "December"];
+    
+    // Day names
+    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    
+    let calendarHTML = `
+        <div class="calendar-header">
+            <div class="calendar-month">${monthNames[month]} ${year}</div>
+            <div class="calendar-navigation">
+                <button id="prev-month" class="btn secondary-btn"><i class="fas fa-chevron-left"></i></button>
+                <button id="next-month" class="btn secondary-btn"><i class="fas fa-chevron-right"></i></button>
+            </div>
+        </div>
+        <div class="calendar">
+    `;
+    
+    // Add day headers
+    dayNames.forEach(day => {
+        calendarHTML += `<div class="calendar-day-header">${day}</div>`;
+    });
+    
+    // Add empty cells for days before the first day of the month
+    for (let i = 0; i < firstDay; i++) {
+        calendarHTML += `<div class="calendar-day"></div>`;
+    }
+    
+    // Add days of the month
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${year}-${(month + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+        const hasWorkout = workoutDates[dateStr];
+        
+        calendarHTML += `
+            <div class="calendar-day ${hasWorkout ? 'has-workout' : ''}">
+                <div class="calendar-day-number">${day}</div>
+                ${hasWorkout ? `<div class="calendar-workout-info">${hasWorkout}</div>` : ''}
+            </div>
+        `;
+    }
+    
+    calendarHTML += `</div>`;
+    
+    calendarContainer.innerHTML = calendarHTML;
+    
+    // Add event listeners for month navigation
+    document.getElementById("prev-month").addEventListener("click", function() {
+        const newMonth = month === 0 ? 11 : month - 1;
+        const newYear = month === 0 ? year - 1 : year;
+        renderCalendar(newMonth, newYear);
+    });
+    
+    document.getElementById("next-month").addEventListener("click", function() {
+        const newMonth = month === 11 ? 0 : month + 1;
+        const newYear = month === 11 ? year + 1 : year;
+        renderCalendar(newMonth, newYear);
+    });
+}
+
+function getWorkoutDatesForMonth(month, year) {
+    const workoutDates = {};
+    
+    try {
+        if (!db) return workoutDates;
+        
+        const monthStr = (month + 1).toString().padStart(2, '0');
+        const result = db.exec(`SELECT date, workoutName FROM workouts WHERE date LIKE '${year}-${monthStr}-%'`);
+        
+        if (result.length && result[0].values.length) {
+            result[0].values.forEach(row => {
+                const [date, workoutName] = row;
+                workoutDates[date] = workoutName;
+            });
+        }
+    } catch (error) {
+        console.error("Error getting workout dates:", error);
+    }
+    
+    return workoutDates;
+}
+
 function formatDate(dateString) {
     const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
     return new Date(dateString).toLocaleDateString(undefined, options);
@@ -490,9 +932,18 @@ function formatDate(dateString) {
 
 // Event listeners and initialization
 document.addEventListener("DOMContentLoaded", function() {
+    // Initialize theme toggle
+    initThemeToggle();
+    
     // Initialize database
     initDatabase().then(() => {
         console.log("App initialized successfully");
+        
+        // Initialize notifications
+        initNotifications();
+        
+        // Initialize workout notes
+        initializeWorkoutNotes();
         
         // Add day selection event listener
         document.getElementById("day").addEventListener("change", function() {
@@ -500,11 +951,20 @@ document.addEventListener("DOMContentLoaded", function() {
             currentExerciseIndex = 0;
             totalExercises = workoutPlan[currentDay].exercises.length;
             
+            // Reset workout stats
+            setsCompleted = 0;
+            totalVolume = 0;
+            document.getElementById("sets-completed").textContent = "0";
+            document.getElementById("total-volume").textContent = "0";
+            
             // Start workout timer
             startWorkoutDurationTimer();
             
             // Initialize rest timer
             initializeRestTimer();
+            
+            // Restore workout notes
+            restoreWorkoutNotes(currentDay);
             
             // Show first exercise
             showExercise(currentDay);
@@ -512,6 +972,12 @@ document.addEventListener("DOMContentLoaded", function() {
         
         // View history button
         document.getElementById("view-history").addEventListener("click", viewWorkoutHistory);
+        
+        // Export to CSV button
+        document.getElementById("export-csv").addEventListener("click", exportToCSV);
+        
+        // Calendar view button
+        document.getElementById("view-calendar").addEventListener("click", viewCalendar);
         
         // Select first day by default
         document.getElementById("day").value = "1";

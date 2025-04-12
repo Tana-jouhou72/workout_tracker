@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -13,28 +13,39 @@
 <body>
     <div class="app-container">
         <header>
-            <h1><i class="fas fa-dumbbell"></i> Weekly Workout Plan</h1>
+            <h1 class="app-title"><i class="fas fa-dumbbell"></i> Workout Tracker</h1>
+            <div class="theme-toggle">
+                <label class="switch">
+                    <input type="checkbox" id="theme-switch">
+                    <span class="slider round"></span>
+                </label>
+                <span class="theme-label"><i class="fas fa-moon"></i></span>
+            </div>
         </header>
         
         <main>
             <section id="day-selector">
                 <label for="day">Select Workout Day:</label>
-                <select id="day">
-                    <option value="1">Monday - Push Day</option>
-                    <option value="2">Tuesday - Pull Day</option>
-                    <option value="3">Wednesday - Legs & Core</option>
-                    <option value="4">Thursday - Recovery</option>
-                    <option value="5">Friday - Full Body</option>
-                    <option value="6">Saturday - Cardio & Core</option>
-                    <option value="7">Sunday - Rest Day</option>
+                <select id="day" class="custom-select">
+                    <option value="" disabled selected>Select workout day</option>
+                    <option value="1">Day 1: Push</option>
+                    <option value="2">Day 2: Pull</option>
+                    <option value="3">Day 3: Legs</option>
+                    <option value="4">Day 4: Full Body</option>
+                    <option value="5">Day 5: Core & Cardio</option>
                 </select>
             </section>
             
             <div class="dashboard">
                 <section id="workout-display">
-                    <div id="workout-details"></div>
+                    <div id="workout-details" class="workout-details">
+                        <div class="select-workout-message">
+                            <i class="fas fa-arrow-up"></i>
+                            <p>Select a workout day to begin</p>
+                        </div>
+                    </div>
                     
-                    <div id="rest-timer-container">
+                    <div id="rest-timer-container" class="rest-timer-container">
                         <!-- Rest timer dynamically initialized here -->
                     </div>
                 </section>
@@ -50,19 +61,48 @@
                         <div class="progress-container">
                             <div id="exercise-progress-bar" class="progress-bar"></div>
                         </div>
-                        <p id="progress-text">Exercise 0 of 0</p>
+                        <p id="progress-text">Select a workout day to begin</p>
+                    </div>
+                    
+                    <div class="summary-card">
+                        <h3><i class="fas fa-trophy"></i> Workout Stats</h3>
+                        <div id="workout-stats">
+                            <div class="stat-item">
+                                <span>Total Volume: </span>
+                                <span id="total-volume">0kg</span>
+                            </div>
+                            <div class="stat-item">
+                                <span>Sets Completed: </span>
+                                <span id="sets-completed">0</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
             
+            <section id="workout-notes">
+                <h3><i class="fas fa-clipboard"></i> Workout Notes</h3>
+                <textarea id="session-notes" placeholder="Add notes for this workout session..."></textarea>
+                <button id="save-notes" class="btn secondary-btn">Save Notes</button>
+            </section>
+            
             <section id="history-section">
                 <div class="history-header">
                     <h2><i class="fas fa-history"></i> Workout History</h2>
-                    <button id="view-history" class="btn primary-btn">
-                        <i class="fas fa-chart-line"></i> View History
-                    </button>
+                    <div class="history-controls workout-history-controls">
+                        <button id="view-history" class="btn secondary-btn">
+                            <i class="fas fa-chart-line"></i> View History
+                        </button>
+                        <button id="export-csv" class="btn secondary-btn">
+                            <i class="fas fa-file-export"></i> Export CSV
+                        </button>
+                        <button id="view-calendar" class="btn secondary-btn">
+                            <i class="fas fa-calendar"></i> Calendar View
+                        </button>
+                    </div>
                 </div>
-                <div id="history-container" class="hidden"></div>
+                <div id="history-container" class="history-container hidden"></div>
+                <div id="calendar-container" class="calendar-container hidden"></div>
             </section>
         </main>
         
@@ -71,9 +111,22 @@
         </footer>
     </div>
     
+    <!-- Notifications permission dialog -->
+    <div id="notification-permission" class="notification-dialog hidden">
+        <div class="notification-content">
+            <h3><i class="fas fa-bell"></i> Enable Notifications?</h3>
+            <p>Would you like to receive notifications when your rest timer completes?</p>
+            <div class="notification-actions">
+                <button id="enable-notifications" class="btn primary-btn">Yes, Enable</button>
+                <button id="disable-notifications" class="btn secondary-btn">No Thanks</button>
+            </div>
+        </div>
+    </div>
+    
     <!-- Sound effects -->
     <audio id="timer-complete" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg"></audio>
     <audio id="set-complete" src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg"></audio>
+    <audio id="pr-sound" src="https://actions.google.com/sounds/v1/sports/crowd_cheer.ogg"></audio>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
     <script src="script.js"></script>

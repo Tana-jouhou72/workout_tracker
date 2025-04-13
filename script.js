@@ -985,6 +985,124 @@ function deleteWorkout(workoutId) {
     }
 }
 
+// Add LocalStorage functionality for data persistence
+function saveToLocalStorage() {
+    // Save all workout data
+    const dataToSave = {
+        exerciseRepsData: exerciseRepsData,
+        workoutNotes: workoutNotes,
+        personalRecords: personalRecords,
+        setsCompleted: setsCompleted,
+        totalVolume: totalVolume,
+        timerData: {
+            savedElapsedTime: savedElapsedTime,
+            isRunning: isTimerRunning
+        }
+    };
+    
+    localStorage.setItem('workoutAppData', JSON.stringify(dataToSave));
+    console.log('Data saved to localStorage');
+}
+
+function loadFromLocalStorage() {
+    const savedData = localStorage.getItem('workoutAppData');
+    
+    if (savedData) {
+        try {
+            const parsedData = JSON.parse(savedData);
+            
+            // Restore all workout data
+            if (parsedData.exerciseRepsData) exerciseRepsData = parsedData.exerciseRepsData;
+            if (parsedData.workoutNotes) workoutNotes = parsedData.workoutNotes;
+            if (parsedData.personalRecords) personalRecords = parsedData.personalRecords;
+            if (parsedData.setsCompleted) setsCompleted = parsedData.setsCompleted;
+            if (parsedData.totalVolume) totalVolume = parsedData.totalVolume;
+            
+            // Restore timer data
+            if (parsedData.timerData) {
+                savedElapsedTime = parsedData.timerData.savedElapsedTime || 0;
+                isTimerRunning = false; // Always start paused on page load
+                
+                // Update timer display
+                const minutes = Math.floor(savedElapsedTime / 60000);
+                const seconds = Math.floor((savedElapsedTime % 60000) / 1000);
+                const timerDisplay = document.getElementById("workout-timer-display");
+                if (timerDisplay) {
+                    timerDisplay.textContent = `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
+                }
+            }
+            
+            console.log('Data loaded from localStorage');
+        } catch (error) {
+            console.error('Error loading data from localStorage:', error);
+        }
+    }
+}
+
+// Save data periodically and on certain actions
+function setupAutosave() {
+    // Save data every 30 seconds
+    setInterval(saveToLocalStorage, 30000);
+    
+    // Save data before page unload (when closing or refreshing)
+    window.addEventListener('beforeunload', saveToLocalStorage);
+    
+    // Save when completing sets
+    const originalSaveRepsData = saveRepsData;
+    saveRepsData = function(day, exerciseIndex) {
+        originalSaveRepsData(day, exerciseIndex);
+        saveToLocalStorage();
+    };
+    
+    // Save when completing workout
+    const originalSaveWorkoutToDatabase = saveWorkoutToDatabase;
+    saveWorkoutToDatabase = function(day) {
+        originalSaveWorkoutToDatabase(day);
+        saveToLocalStorage();
+    };
+}
+
+// Function to clear all stored data
+function clearAllData() {
+    // Ask for confirmation before clearing
+    if (confirm("Are you sure you want to clear all saved workout data? This cannot be undone.")) {
+        // Clear localStorage data
+        localStorage.removeItem('workoutAppData');
+        localStorage.removeItem('workoutTimer');
+        
+        // Reset app state
+        exerciseRepsData = {};
+        workoutNotes = {};
+        setsCompleted = 0;
+        totalVolume = 0;
+        savedElapsedTime = 0;
+        isTimerRunning = false;
+        
+        // Update display
+        document.getElementById("workout-timer-display").textContent = "0m 0s";
+        document.getElementById("sets-completed").textContent = "0";
+        document.getElementById("total-volume").textContent = "0kg";
+        
+        // Clear the session notes
+        document.getElementById("session-notes").value = "";
+        
+        // Try to clear IndexedDB data if used by sql.js
+        try {
+            indexedDB.deleteDatabase("SQL-JS");
+        } catch (e) {
+            console.error("Error clearing IndexedDB:", e);
+        }
+        
+        // Re-initialize database
+        initDatabase().then(() => {
+            alert("All workout data has been cleared!");
+            
+            // Refresh the page to ensure everything is reset
+            window.location.reload();
+        });
+    }
+}
+
 // Event listeners and initialization
 document.addEventListener("DOMContentLoaded", function() {
     // Initialize theme toggle
@@ -1033,6 +1151,15 @@ document.addEventListener("DOMContentLoaded", function() {
         
         // Calendar view button
         document.getElementById("view-calendar").addEventListener("click", viewCalendar);
+        
+        // Clear all data button
+        document.getElementById("clear-all-data").addEventListener("click", clearAllData);
+        
+        // Load data from localStorage
+        loadFromLocalStorage();
+        
+        // Setup autosave functionality
+        setupAutosave();
         
         // Select first day by default
         document.getElementById("day").value = "1";

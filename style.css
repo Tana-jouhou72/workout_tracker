@@ -884,3 +884,81 @@ footer {
         padding: 0.25rem;
     }
 }
+
+/* Reps Selector Styles */
+.reps-selector {
+    position: relative;
+    flex: 1;
+}
+
+.reps-display {
+    background-color: var(--card-bg);
+    color: var(--text-color);
+    padding: 0.5rem 1rem;
+    text-align: center;
+    cursor: pointer;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+}
+
+.reps-display::after {
+    content: '\f107';
+    font-family: 'Font Awesome 6 Free';
+    font-weight: 900;
+    margin-left: 0.5rem;
+}
+
+.reps-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background-color: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin-top: 0.25rem;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 100;
+    display: none;
+    box-shadow: 0 4px 12px var(--shadow-color);
+}
+
+.reps-dropdown.active {
+    display: block;
+}
+
+.reps-option {
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.reps-option:hover, .reps-option.selected {
+    background-color: var(--input-bg);
+}
+
+.reps-selector-placeholder {
+    height: 36px;
+}
+
+.reps-select {
+    flex: 1;
+    padding: 0.5rem;
+    border: none;
+    background-color: var(--card-bg);
+    color: var(--text-color);
+    text-align: center;
+    font-size: 1rem;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 0.5rem center;
+    background-size: 1em;
+    cursor: pointer;
+}

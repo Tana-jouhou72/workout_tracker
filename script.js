@@ -236,20 +236,47 @@ function playSound(id) {
 }
 
 // Workout timer functionality
-function startWorkoutDurationTimer() {
+function toggleWorkoutTimer() {
     const timerDisplay = document.getElementById("workout-timer-display");
-    const startTime = Date.now();
+    const startPauseButton = document.getElementById("start-pause-timer");
     
-    if (workoutTimer) {
+    if (isTimerRunning) {
+        // Pause timer
         clearInterval(workoutTimer);
+        savedElapsedTime += Date.now() - timerStartTime;
+        isTimerRunning = false;
+        startPauseButton.innerHTML = '<i class="fas fa-play"></i> Start';
+    } else {
+        // Start timer
+        timerStartTime = Date.now();
+        isTimerRunning = true;
+        startPauseButton.innerHTML = '<i class="fas fa-pause"></i> Pause';
+        
+        workoutTimer = setInterval(() => {
+            const elapsedTime = savedElapsedTime + (Date.now() - timerStartTime);
+            const minutes = Math.floor(elapsedTime / 60000);
+            const seconds = Math.floor((elapsedTime % 60000) / 1000);
+            timerDisplay.textContent = `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
+            
+            // Save the elapsed time to localStorage
+            localStorage.setItem("workoutTimer", JSON.stringify({
+                savedElapsedTime: savedElapsedTime,
+                startTime: timerStartTime,
+                isRunning: isTimerRunning
+            }));
+        }, 1000);
     }
-    
-    workoutTimer = setInterval(() => {
-        const elapsedTime = Math.floor((Date.now() - startTime) / 1000);
-        const minutes = Math.floor(elapsedTime / 60);
-        const seconds = elapsedTime % 60;
-        timerDisplay.textContent = `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
-    }, 1000);
+}
+
+// Variable declarations for timer
+let isTimerRunning = false;
+let timerStartTime = null;
+let savedElapsedTime = 0;
+
+// This function is being replaced - keep this as a reference but it will not be used
+function startWorkoutDurationTimer() {
+    // This function is being replaced by toggleWorkoutTimer
+    // It's kept here for reference but won't be called
 }
 
 // Rest timer functionality
@@ -527,7 +554,12 @@ function showExercise(day) {
                     <div class="set-group">
                         <div class="set-input">
                             <button>Set ${setIndex + 1}</button>
-                            <input type="number" id="reps-${currentExerciseIndex}-set-${setIndex}" placeholder="Reps" min="0">
+                            <select id="reps-${currentExerciseIndex}-set-${setIndex}" class="reps-select">
+                                <option value="">Select reps</option>
+                                ${[...Array(20)].map((_, i) => 
+                                    `<option value="${i+1}">${i+1} reps</option>`
+                                ).join('')}
+                            </select>
                         </div>
                         <input type="number" id="weight-${currentExerciseIndex}-set-${setIndex}" class="weight-input" placeholder="kg" min="0" step="0.5">
                     </div>
@@ -787,6 +819,7 @@ function viewWorkoutHistory() {
                 
                 historyHTML += `
                         </ul>
+                        <button class="btn delete-btn" onclick="deleteWorkout(${id})"><i class="fas fa-trash"></i> Delete</button>
                     </div>
                 `;
             });
@@ -930,6 +963,28 @@ function formatDate(dateString) {
     return new Date(dateString).toLocaleDateString(undefined, options);
 }
 
+// Add Delete Functionality for workout history
+function deleteWorkout(workoutId) {
+    try {
+        if (!db) {
+            alert("Database not initialized");
+            return;
+        }
+        
+        // Delete the workout from the database
+        db.run(`DELETE FROM workouts WHERE id = ?;`, [workoutId]);
+        
+        // Refresh the history view
+        viewWorkoutHistory();
+        
+        // Show success message
+        alert("Workout deleted successfully!");
+    } catch (error) {
+        console.error("Error deleting workout:", error);
+        alert("Error deleting workout. Please try again.");
+    }
+}
+
 // Event listeners and initialization
 document.addEventListener("DOMContentLoaded", function() {
     // Initialize theme toggle
@@ -945,6 +1000,9 @@ document.addEventListener("DOMContentLoaded", function() {
         // Initialize workout notes
         initializeWorkoutNotes();
         
+        // Add event listener for the workout timer button
+        document.getElementById("start-pause-timer").addEventListener("click", toggleWorkoutTimer);
+        
         // Add day selection event listener
         document.getElementById("day").addEventListener("change", function() {
             currentDay = this.value;
@@ -956,9 +1014,6 @@ document.addEventListener("DOMContentLoaded", function() {
             totalVolume = 0;
             document.getElementById("sets-completed").textContent = "0";
             document.getElementById("total-volume").textContent = "0";
-            
-            // Start workout timer
-            startWorkoutDurationTimer();
             
             // Initialize rest timer
             initializeRestTimer();
